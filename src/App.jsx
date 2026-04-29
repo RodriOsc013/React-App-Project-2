@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import "./App.css";
 function App() {
   const [search, setSearch] = useState("");
@@ -7,14 +7,17 @@ function App() {
   const [statusMessage, setStatusMessage] = useState(
     "Search for a recipe to begin."
   );
-  const [selectedMeal, setSelectedMeal] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [mealDetails, setMealDetails] = useState(null);
   const handleSearch = () => {
+    if (!search.trim() && !category) {
+      setStatusMessage("Please enter a search or select a category.");
+      return;
+    }
     fetchMeals();
   };
   const handleKeyPress = (e) => {
-    if (e.key === "Enter") fetchMeals();
+    if (e.key === "Enter") handleSearch();
   };
   async function fetchMeals() {
     const query = search.trim();
@@ -102,14 +105,8 @@ function App() {
         <section className="recipe-app">
           <h1>Recipe Finder</h1>
           <div className="search-box">
-            <input
-              type="text"
-              placeholder="Search recipes..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyPress={handleKeyPress}
-            />
-            <select value={category} onChange={(e) => {setCategory(e.target.value); fetchMeals();}}>
+            <input type="text"placeholder="Search recipes..."value={search}onChange={(e) => setSearch(e.target.value)}onKeyDown={handleKeyPress}/>
+            <select value={category}onChange={(e) => setCategory(e.target.value)}>
               <option value="">All Categories</option>
               <option value="Seafood">Seafood</option>
               <option value="Chicken">Chicken</option>
