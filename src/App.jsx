@@ -1,7 +1,8 @@
-<<<<<<< HEAD
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
+
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import './App.css';
+import useMealDetails from './hooks/useMealDetails';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -136,6 +137,8 @@ const FOOD_TABLE_GROUPS = [
 	},
 ];
 
+const AppContext = createContext(null);
+
 function normalizeText(value) {
 	return String(value || '').trim();
 }
@@ -245,6 +248,9 @@ function AppHeader({ selectedMealTitle }) {
 				</NavLink>
 				<NavLink to="/planner" className={({ isActive }) => (isActive ? 'nav-link nav-link-active' : 'nav-link')}>
 					Planner
+				</NavLink>
+				<NavLink to="/favorites" className={({ isActive }) => (isActive ? 'nav-link nav-link-active' : 'nav-link')}>
+					Favorites
 				</NavLink>
 			</nav>
 			<div className="app-header-meta">
@@ -708,6 +714,9 @@ function PlannerPage({
 						<h2>Weekly plan</h2>
 						<p>7 days</p>
 					</div>
+					<Link to="/planner/weekly" className="text-button">
+						View weekly plan
+					</Link>
 					<button type="button" className="primary-button" onClick={onGenerateWeeklyPlan} disabled={generatingWeeklyPlan}>
 						{generatingWeeklyPlan ? 'Generating...' : 'Generate 7-day plan'}
 					</button>
@@ -737,7 +746,7 @@ function PlannerPage({
 	);
 }
 
-function App() {
+function AppLayout() {
 	const navigate = useNavigate();
 	const [searchTerm, setSearchTerm] = useState('');
 	const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -766,6 +775,14 @@ function App() {
 	const [weeklyPlan, setWeeklyPlan] = useState([]);
 	const [generatingWeeklyPlan, setGeneratingWeeklyPlan] = useState(false);
 	const [weeklyPlanError, setWeeklyPlanError] = useState('');
+	const [favorites, setFavorites] = useState(() => {
+		try {
+			const raw = window.localStorage.getItem('meal-planner-favorites');
+			return raw ? JSON.parse(raw) : [];
+		} catch {
+			return [];
+		}
+	});
 	const mealListCacheRef = useRef(new Map());
 	const mealDetailsCacheRef = useRef(new Map());
 
@@ -787,6 +804,10 @@ function App() {
 	useEffect(() => {
 		window.localStorage.setItem('meal-planner-substitutions', JSON.stringify(substitutions));
 	}, [substitutions]);
+
+	useEffect(() => {
+		window.localStorage.setItem('meal-planner-favorites', JSON.stringify(favorites));
+	}, [favorites]);
 
 	useEffect(() => {
 		if (!normalizeText(searchTerm)) {
@@ -947,10 +968,11 @@ function App() {
 	}, []);
 
 	function selectMeal(meal) {
+		if (!meal?.idMeal) return;
 		setSelectedMealSummary(meal);
 		setSelectedMealDetails(null);
 		setDetailError('');
-		navigate('/planner');
+		navigate(`/recipe/${meal.idMeal}`);
 	}
 
 	function applySubstitution(event) {
@@ -1106,46 +1128,159 @@ function App() {
 	}
 
 	function selectMealInPlace(meal) {
-		setSelectedMealSummary(meal);
-		setSelectedMealDetails(null);
-		setDetailError('');
+		selectMeal(meal);
 	}
 
-	function renderHome() {
-		return <HomePage showcaseMeals={showcaseMeals} onOpenMeal={openMeal} onGoExplore={goExplore} onGoPlanner={goPlanner} />;
+	function toggleFavorite(idMeal) {
+		if (!idMeal) return;
+		setFavorites((current) => (current.includes(idMeal) ? current.filter((id) => id !== idMeal) : [...current, idMeal]));
 	}
 
-	function renderExplore() {
-		return (
-			<ExplorePage
-				searchTerm={searchTerm}
-				setSearchTerm={setSearchTerm}
-				browseMode={browseMode}
-				setBrowseMode={setBrowseMode}
-				selectedLetter={selectedLetter}
-				setSelectedLetter={setSelectedLetter}
-				selectedRegionKey={selectedRegionKey}
-				setSelectedRegionKey={setSelectedRegionKey}
-				selectedRegion={selectedRegion}
-				currentBrowseLabel={currentBrowseLabel}
-				loadingMeals={loadingMeals}
-				mealError={mealError}
-				meals={meals}
-				activeMeal={activeMeal}
-				selectedMealTitle={selectedMealTitle}
-				prepTime={prepTime}
-				ingredientList={ingredientList}
-				steps={steps}
-				loadingDetails={loadingDetails}
-				detailError={detailError}
-				onSelectMeal={selectMealInPlace}
-				onOpenPlanner={goPlanner}
-			/>
-		);
+	function isFavorite(idMeal) {
+		return Boolean(idMeal && favorites.includes(idMeal));
 	}
 
-	function renderPlanner() {
-		return (
+	const contextValue = {
+		showcaseMeals,
+		openMeal,
+		goExplore,
+		goPlanner,
+		searchTerm,
+		setSearchTerm,
+		browseMode,
+		setBrowseMode,
+		selectedLetter,
+		setSelectedLetter,
+		selectedRegionKey,
+		setSelectedRegionKey,
+		selectedRegion,
+		currentBrowseLabel,
+		loadingMeals,
+		mealError,
+		meals,
+		activeMeal,
+		selectedMealTitle,
+		prepTime,
+		ingredientList,
+		steps,
+		loadingDetails,
+		detailError,
+		selectMealInPlace,
+		applyQuickSubstitution,
+		clearMealSubstitutions,
+		clearAllSubstitutions,
+		swapIngredient,
+		setSwapIngredient,
+		swapReplacement,
+		setSwapReplacement,
+		applySubstitution,
+		swapNote,
+		weeklyPlan,
+		generatingWeeklyPlan,
+		weeklyPlanError,
+		generateWeeklyPlan,
+		favorites,
+		toggleFavorite,
+		isFavorite,
+	};
+
+	return (
+		<AppContext.Provider value={contextValue}>
+			<div className="app-shell">
+				<AppHeader selectedMealTitle={selectedMealTitle} />
+				<Outlet />
+			</div>
+		</AppContext.Provider>
+	);
+}
+
+function HomeRoute() {
+	const { showcaseMeals, openMeal, goExplore, goPlanner } = useContext(AppContext);
+	return <HomePage showcaseMeals={showcaseMeals} onOpenMeal={openMeal} onGoExplore={goExplore} onGoPlanner={goPlanner} />;
+}
+
+function ExploreRoute() {
+	const {
+		searchTerm,
+		setSearchTerm,
+		browseMode,
+		setBrowseMode,
+		selectedLetter,
+		setSelectedLetter,
+		selectedRegionKey,
+		setSelectedRegionKey,
+		selectedRegion,
+		currentBrowseLabel,
+		loadingMeals,
+		mealError,
+		meals,
+		activeMeal,
+		selectedMealTitle,
+		prepTime,
+		ingredientList,
+		steps,
+		loadingDetails,
+		detailError,
+		selectMealInPlace,
+		goPlanner,
+	} = useContext(AppContext);
+
+	return (
+		<ExplorePage
+			searchTerm={searchTerm}
+			setSearchTerm={setSearchTerm}
+			browseMode={browseMode}
+			setBrowseMode={setBrowseMode}
+			selectedLetter={selectedLetter}
+			setSelectedLetter={setSelectedLetter}
+			selectedRegionKey={selectedRegionKey}
+			setSelectedRegionKey={setSelectedRegionKey}
+			selectedRegion={selectedRegion}
+			currentBrowseLabel={currentBrowseLabel}
+			loadingMeals={loadingMeals}
+			mealError={mealError}
+			meals={meals}
+			activeMeal={activeMeal}
+			selectedMealTitle={selectedMealTitle}
+			prepTime={prepTime}
+			ingredientList={ingredientList}
+			steps={steps}
+			loadingDetails={loadingDetails}
+			detailError={detailError}
+			onSelectMeal={selectMealInPlace}
+			onOpenPlanner={goPlanner}
+		/>
+	);
+}
+
+function PlannerRoute() {
+	const {
+		activeMeal,
+		selectedMealTitle,
+		prepTime,
+		ingredientList,
+		steps,
+		loadingDetails,
+		detailError,
+		applyQuickSubstitution,
+		clearMealSubstitutions,
+		clearAllSubstitutions,
+		swapIngredient,
+		setSwapIngredient,
+		swapReplacement,
+		setSwapReplacement,
+		applySubstitution,
+		swapNote,
+		meals,
+		weeklyPlan,
+		generatingWeeklyPlan,
+		weeklyPlanError,
+		generateWeeklyPlan,
+		openMeal,
+	} = useContext(AppContext);
+
+	return (
+		<>
 			<PlannerPage
 				activeMeal={activeMeal}
 				selectedMealTitle={selectedMealTitle}
@@ -1170,197 +1305,241 @@ function App() {
 				onGenerateWeeklyPlan={generateWeeklyPlan}
 				onOpenMeal={openMeal}
 			/>
-		);
-	}
+			<Outlet />
+		</>
+	);
+}
+
+function WeeklyPlanRoute() {
+	const { weeklyPlan, generatingWeeklyPlan, weeklyPlanError, generateWeeklyPlan, openMeal } = useContext(AppContext);
 
 	return (
-		<div className="app-shell">
-			<AppHeader selectedMealTitle={selectedMealTitle} />
-			<Routes>
-				<Route path="/" element={renderHome()} />
-				<Route path="/explore" element={renderExplore()} />
-				<Route
-					path="/planner"
-					element={renderPlanner()}
-				/>
-				<Route path="*" element={<Navigate to="/" replace />} />
-			</Routes>
+		<section className="main-grid planner-grid">
+			<div className="results-panel">
+				<div className="panel-head">
+					<div>
+						<p className="eyebrow">Planner</p>
+						<h2>Weekly plan</h2>
+					</div>
+					<Link to="/planner" className="text-button">
+						Back to planner
+					</Link>
+				</div>
+				<button type="button" className="primary-button" onClick={generateWeeklyPlan} disabled={generatingWeeklyPlan}>
+					{generatingWeeklyPlan ? 'Generating...' : 'Generate 7-day plan'}
+				</button>
+				{weeklyPlanError ? <div className="message-card error">{weeklyPlanError}</div> : null}
+				{weeklyPlan.length ? (
+					<div className="weekly-plan-list">
+						{weeklyPlan.map((item) => (
+							<button
+								key={`${item.day}-${item.meal.idMeal}`}
+								type="button"
+								className="weekly-plan-item"
+								onClick={() => openMeal(item.meal)}
+							>
+								<img src={item.meal.strMealThumb} alt={item.meal.strMeal} loading="lazy" />
+								<div>
+									<strong>{item.day}</strong>
+									<span>{item.regionLabel} · {item.prepTime} min</span>
+									<p>{item.meal.strMeal}</p>
+								</div>
+							</button>
+						))}
+					</div>
+				) : (
+					<div className="message-card">No weekly plan yet. Generate a plan to see it here.</div>
+				)}
+			</div>
+		</section>
+	);
+}
+
+function RecipeDetailRoute() {
+	const { idMeal } = useParams();
+	const { meal, loading, error } = useMealDetails(idMeal);
+	const { toggleFavorite, isFavorite } = useContext(AppContext);
+
+	if (loading) {
+		return <div className="message-card">Loading recipe details...</div>;
+	}
+
+	if (error) {
+		return <div className="message-card error">{error}</div>;
+	}
+
+	if (!meal) {
+		return <div className="message-card">We couldn't find that recipe.</div>;
+	}
+
+	const ingredientList = extractIngredients(meal);
+	const steps = extractSteps(meal);
+	const prepTime = estimatePrepTime(meal);
+
+	return (
+		<section className="main-grid planner-grid">
+			<div className="results-panel">
+				<div className="panel-head">
+					<div>
+						<p className="eyebrow">Recipe detail</p>
+						<h2>{meal.strMeal}</h2>
+					</div>
+					<Link to="/explore" className="text-button">
+						Back to explore
+					</Link>
+				</div>
+				<div className="detail-hero">
+					<img src={meal.strMealThumb} alt={meal.strMeal} loading="lazy" />
+					<div className="detail-meta">
+						<span>{getRegionLabel(meal.strArea)}</span>
+						<strong>{meal.strCategory || 'MealDB recipe'}</strong>
+						<p>{meal.strArea ? `Cooked in the style of ${meal.strArea}.` : 'Explore this recipe in detail.'}</p>
+						<div className="info-row">
+							<span>Prep: {prepTime} min</span>
+							<span>{ingredientList.length} ingredients</span>
+							<span>{steps.length || 'Instruction summary'} steps</span>
+						</div>
+						<button type="button" className="primary-button" onClick={() => toggleFavorite(meal.idMeal)}>
+							{isFavorite(meal.idMeal) ? 'Remove from favorites' : 'Save to favorites'}
+						</button>
+					</div>
+				</div>
+				<div className="section-block">
+					<h3>Ingredients</h3>
+					<ul className="ingredient-list">
+						{ingredientList.map((item, index) => (
+							<li key={`${meal.idMeal}-${item.ingredient}-${index}`} className="ingredient-item">
+								<div>
+									<strong>{item.measure ? `${item.measure} ` : ''}{item.displayIngredient}</strong>
+									<span>{item.ingredient}</span>
+								</div>
+							</li>
+						))}
+					</ul>
+				</div>
+				<div className="section-block">
+					<h3>Preparation steps</h3>
+					{steps.length ? (
+						<ol className="steps-list">
+							{steps.map((step) => (
+								<li key={step}>{step}</li>
+							))}
+						</ol>
+					) : (
+						<p className="muted-copy">This recipe does not include a detailed instruction list in the API preview.</p>
+					)}
+				</div>
+			</div>
+		</section>
+	);
+}
+
+function FavoritesRoute() {
+	const { favorites, toggleFavorite } = useContext(AppContext);
+	const [favoriteMeals, setFavoriteMeals] = useState([]);
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState('');
+
+	useEffect(() => {
+		let isActive = true;
+
+		async function loadFavorites() {
+			if (!favorites.length) {
+				setFavoriteMeals([]);
+				return;
+			}
+
+			setLoading(true);
+			setError('');
+
+			try {
+				const meals = await Promise.all(
+					favorites.map(async (idMeal) => {
+						const response = await fetch(
+							`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${encodeURIComponent(idMeal)}`,
+						);
+						const data = await response.json();
+						return data.meals?.[0] || null;
+					}),
+				);
+
+				if (isActive) {
+					setFavoriteMeals(meals.filter(Boolean));
+				}
+			} catch {
+				if (isActive) {
+					setError('We could not load favorites right now.');
+				}
+			} finally {
+				if (isActive) {
+					setLoading(false);
+				}
+			}
+		}
+
+		loadFavorites();
+
+		return () => {
+			isActive = false;
+		};
+	}, [favorites]);
+
+	return (
+		<section className="main-grid explore-grid">
+			<div className="results-panel">
+				<div className="panel-head">
+					<div>
+						<p className="eyebrow">Saved recipes</p>
+						<h2>Favorites</h2>
+					</div>
+					<Link to="/explore" className="text-button">
+						Browse recipes
+					</Link>
+				</div>
+
+				{loading ? <div className="message-card">Loading favorites...</div> : null}
+				{error ? <div className="message-card error">{error}</div> : null}
+				{!loading && !error && !favoriteMeals.length ? (
+					<div className="message-card">No favorites yet. Save meals to see them here.</div>
+				) : null}
+
+				<div className="meal-grid">
+					{favoriteMeals.map((meal) => (
+						<div key={meal.idMeal} className="meal-card">
+							<img src={meal.strMealThumb} alt={meal.strMeal} loading="lazy" />
+							<div className="meal-card-copy">
+								<span className="meal-tag">{getRegionLabel(meal.strArea)}</span>
+								<strong>{meal.strMeal}</strong>
+								<span>{meal.strCategory || 'Recipe'}{meal.strArea ? ` · ${meal.strArea}` : ''}</span>
+								<div className="hero-actions">
+									<Link to={`/recipe/${meal.idMeal}`} className="text-button">
+										View
+									</Link>
+									<button type="button" className="text-button" onClick={() => toggleFavorite(meal.idMeal)}>
+										Remove
+									</button>
+								</div>
+							</div>
+						</div>
+					))}
+				</div>
+			</div>
+		</section>
+	);
+}
+
+function NotFoundRoute() {
+	return (
+		<div className="message-card">
+			<h2>Page not found</h2>
+			<p>The page you are looking for does not exist.</p>
+			<Link to="/" className="text-button">
+				Back to home
+			</Link>
 		</div>
 	);
 }
 
-export default App;
+export { AppLayout, HomeRoute, ExploreRoute, PlannerRoute, WeeklyPlanRoute, RecipeDetailRoute, FavoritesRoute, NotFoundRoute };
 
-=======
-import { useState } from "react";
-import "./App.css";
-function App() {
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("");
-  const [results, setResults] = useState([]);
-  const [statusMessage, setStatusMessage] = useState(
-    "Search for a recipe to begin."
-  );
-  const [showModal, setShowModal] = useState(false);
-  const [mealDetails, setMealDetails] = useState(null);
-  const handleSearch = () => {
-    if (!search.trim() && !category) {
-      setStatusMessage("Please enter a search or select a category.");
-      return;
-    }
-    fetchMeals();
-  };
-  const handleKeyPress = (e) => {
-    if (e.key === "Enter") handleSearch();
-  };
-  async function fetchMeals() {
-    const query = search.trim();
-    setResults([]);
-    setMealDetails(null);
-    setStatusMessage("Loading...");
-    try {
-      const response = await fetch(
-        `https://www.themealdb.com/api/json/v1/1/search.php?s=${query}`
-      );
-      const data = await response.json();
-      let meals = data.meals;
-      if (!meals) {
-        setStatusMessage(
-          "No recipes found. Showing popular chicken recipes instead."
-        );
-        const fallback = await fetch(
-          "https://www.themealdb.com/api/json/v1/1/search.php?s=chicken"
-        );
-        const fallbackData = await fallback.json();
-        meals = fallbackData.meals;
-      } else {
-        setStatusMessage("");
-      }
-      displayMeals(meals);
-    } catch (error) {
-      displayError();
-    }
-  }
-  function displayMeals(meals) {
-    if (!meals || meals.length === 0) {
-      setStatusMessage(
-        "No recipes found. Try 'chicken', 'beef', 'pasta', or 'dessert'."
-      );
-      return;
-    }
-    let filteredMeals = meals;
-    if (category) {
-      filteredMeals = meals.filter(
-        (meal) =>
-          meal.strCategory.toLowerCase() === category.toLowerCase()
-      );
-      if (!filteredMeals.length) filteredMeals = meals;
-    }
-    setResults(filteredMeals);
-  }
-  async function fetchMealDetails(id) {
-    setShowModal(true);
-    setMealDetails({ loading: true });
-    try {
-      const response = await fetch(
-        `https://www.themealdb.com/api/json/v1/1/lookup.php?i=${id}`
-      );
-      const data = await response.json();
-      setMealDetails(data.meals[0]);
-    } catch (error) {
-      displayError();
-    }
-  }
-  function displayError() {
-    setStatusMessage("Something went wrong. Try again.");
-  }
-  const closeModal = () => {
-    setShowModal(false);
-    setMealDetails(null);
-  };
-  const renderIngredients = (meal) => {
-    let items = [];
-    for (let i = 1; i <= 20; i++) {
-      const ingredient = meal[`strIngredient${i}`];
-      const measure = meal[`strMeasure${i}`];
-      if (ingredient && ingredient.trim() !== "") {
-        items.push(
-          <li key={i}>
-            {ingredient} - {measure}
-          </li>
-        );
-      }
-    }
-    return items;
-  };
-  return (
-    <>
-      <main className="container">
-        <section className="recipe-app">
-          <h1>Recipe Finder</h1>
-          <div className="search-box">
-            <input type="text"placeholder="Search recipes..."value={search}onChange={(e) => setSearch(e.target.value)}onKeyDown={handleKeyPress}/>
-            <select value={category}onChange={(e) => setCategory(e.target.value)}>
-              <option value="">All Categories</option>
-              <option value="Seafood">Seafood</option>
-              <option value="Chicken">Chicken</option>
-              <option value="Beef">Beef</option>
-              <option value="Starter">Soup</option>
-              <option value="Dessert">Dessert</option>
-            </select>
-            <button onClick={handleSearch}>Search</button>
-          </div>
-          <p>{statusMessage}</p>
-          <div className="results">
-            {results.map((meal) => (
-              <div key={meal.idMeal}className="card"onClick={() => fetchMealDetails(meal.idMeal)}>
-                <img src={meal.strMealThumb} alt={meal.strMeal} />
-                <h3>{meal.strMeal}</h3>
-                <p className="category">{meal.strCategory}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      </main>
-      {showModal && (
-        <div className="modal" onClick={closeModal}>
-          <div className="modal-content"onClick={(e) => e.stopPropagation()}>
-            <span onClick={closeModal}>&times;</span>
-            {!mealDetails || mealDetails.loading ? (
-              <p>Loading...</p>
-            ) : (
-              <>
-                <h2>{mealDetails.strMeal}</h2>
-                <img src={mealDetails.strMealThumb}alt={mealDetails.strMeal}/>
-                <p>
-                  <strong>Category:</strong>{" "}
-                  {mealDetails.strCategory}
-                </p>
-                <div className="recipe-section">
-                  <h3>Ingredients</h3>
-                  <ul className="ingredients">
-                    {renderIngredients(mealDetails)}
-                  </ul>
-                </div>
-                <div className="recipe-section">
-                  <h3>Instructions</h3>
-                  <p className="instructions">
-                    {mealDetails.strInstructions}
-                  </p>
-                </div>
-                {mealDetails.strYoutube && (
-                  <div className="recipe-section">
-                    <h3>Video</h3>
-                    <a href={mealDetails.strYoutube}target="_blank"rel="noreferrer">Watch on YouTube</a>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-export default App;
->>>>>>> a751d3c4b1addb86831bd1c2ef05b01bdcbb8983
+export default AppLayout;
